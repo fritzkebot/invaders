@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>SPACE INVADERS</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { 
+  background: #000; 
+  display: flex; 
+  justify-content: center; 
+  align-items: center; 
+  height: 100vh; 
+  overflow: hidden;
+  font-family: 'Courier New', monospace;
+}
+#c { 
+  border: 4px solid #0f0; 
+  box-shadow: 0 0 20px #0f0, inset 0 0 20px #0f0;
+}
+#overlay {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #0f0;
+  font-size: 24px;
+  text-shadow: 0 0 10px #0f0;
+  z-index: 10;
+}
+#gameOver {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #f00;
+  font-size: 48px;
+  text-shadow: 0 0 20px #f00;
+  display: none;
+  z-index: 20;
+  text-align: center;
+}
+#gameOver span {
+  font-size: 24px;
+  color: #0f0;
+}
+</style>
+</head>
+<body>
+<div id="overlay">SCORE: <span id="score">0</span> &nbsp;&nbsp; LIVES: <span id="lives">3</span></div>
+<div id="gameOver">GAME OVER<br><span>PRESS SPACE TO RESTART</span></div>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+canvas.width = 600;
+canvas.height = 700;
+
+const W = canvas.width;
+const H = canvas.height;
+
+// Player
+let player = { x: W/2, y: H - 60, w: 50, h: 20, speed: 6 };
+let bullets = [];
+let bombs = [];
+let aliens = [];
+let alienDir = 1;
+let alienSpeed = 1;
+let alienDrop = 0;
+let score = 0;
+let lives = 3;
+let gameRunning = true;
+let gameOver = false;
+let lastBomb = 0;
+let level = 1;
+
+// Alien patterns
+function createAliens() {
+  aliens = [];
+  for (let row = 0; row < 5; row++) {
+    for (let col = 0; col < 11; col++) {
+      aliens.push({
+        x: 50 + col * 45,
+        y: 80 + row * 40,
+        w: 30,
+        h: 24,
+        type: row,
+        frame: 0
+      });
+    }
+  }
+}
+createAliens();
+
+// Input
+let keys = {};
+document.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Space') {
+    if (gameOver) {
+      reset();
+    } else if (gameRunning) {
+      bullets.push({ x: player.x, y: player.y - 10, speed: 10 });
+    }
+  }
+});
+document.addEventListener('keyup', e => keys[e.code] = false);
+
+function reset() {
+  player.x = W/2;
+  bullets = [];
+  bombs = [];
+  alienDir = 1;
+  alienSpeed = 1;
+  score = 0;
+  lives = 3;
+  gameOver = false;
+  gameRunning = true;
+  level = 1;
+  document.getElementById('gameOver').style.display = 'none';
+  createAliens();
+}
+
+// Draw functions
+function drawPlayer() {
+  ctx.fillStyle = '#0f0';
+  // Ship body
+  ctx.fillRect(player.x - 25, player.y, 50, 20);
+  // Cannon
+  ctx.fillRect(player.x - 3, player.y - 15, 6, 15);
+  // Wings
+  ctx.fillStyle = '#0a0';
+  ctx.fillRect(player.x - 30, player.y + 5, 8, 15);
+  ctx.fillRect(player.x + 22, player.y + 5, 8, 15);
+}
+
+function drawAlien(a, frame) {
+  ctx.fillStyle = a.type === 0 ? '#f00' : a.type < 3 ? '#ff0' : '#0ff';
+  const f = frame % 2;
+  if (a.type === 0) {
+    // Top row - squid
+    ctx.fillRect(a.x - 10, a.y, 5, 8);
+    ctx.fillRect(a.x + 5, a.y, 5, 8);
+    ctx.fillRect(a.x - 15, a.y + 8, 30, 8);
+    ctx.fillRect(a.x - 5, a.y + 16, 10, 8);
+    if (f) {
+      ctx.fillRect(a.x - 15, a.y + 8, 5, 8);
+      ctx.fillRect(a.x + 10, a.y + 8, 5, 8);
+    }
+  } else {
+    // Crab / octopus
+    ctx.fillRect(a.x - 12, a.y + 4, 8, 8);
+    ctx.fillRect(a.x + 4, a.y + 4, 8, 8);
+    ctx.fillRect(a.x - 8, a.y + 12, 16, 8);
+    ctx.fillRect(a.x - 15, a.y, 30, 4);
+    if (f) {
+      ctx.fillRect(a.x - 15, a.y + 12, 5, 8);
+      ctx.fillRect(a.x + 10, a.y + 12, 5, 8);
+    }
+  }
+}
+
+function drawBullet(b) {
+  ctx.fillStyle = '#0f0';
+  ctx.fillRect(b.x - 2, b.y, 4, 15);
+}
+
+function drawBomb(b) {
+  ctx.fillStyle = '#f00';
+  ctx.fillRect(b.x - 2, b.y, 4, 10);
+  ctx.fillStyle = '#ff0';
+  ctx.fillRect(b.x - 1, b.y + 4, 2, 6);
+}
+
+function draw() {
+  // Background with scanlines
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+  
+  // Scanlines effect
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  for (let y = 0; y < H; y += 4) {
+    ctx.fillRect(0, y, W, 2);
+  }
+  
+  // Stars
+  ctx.fillStyle = '#333';
+  for (let i = 0; i < 50; i++) {
+    ctx.fillRect((i * 73) % W, (i * 47) % (H - 100), 2, 2);
+  }
+  
+  if (!gameOver) {
+    // Draw player
+    drawPlayer();
+    
+    // Draw aliens
+    aliens.forEach(a => drawAlien(a, Math.floor(Date.now() / 500) % 2));
+    
+    // Draw bullets
+    bullets.forEach(drawBullet);
+    
+    // Draw bombs
+    bombs.forEach(drawBomb);
+  }
+  
+  // Update
+  if (gameRunning && !gameOver) {
+    // Player movement
+    if (keys['ArrowLeft'] || keys['KeyA']) player.x -= player.speed;
+    if (keys['ArrowRight'] || keys['KeyD']) player.x += player.speed;
+    player.x = Math.max(30, Math.min(W - 30, player.x));
+    
+    // Bullets
+    bullets = bullets.filter(b => {
+      b.y -= b.speed;
+      return b.y > 0;
+    });
+    
+    // Alien movement
+    let hitEdge = false;
+    aliens.forEach(a => {
+      a.x += alienDir * alienSpeed;
+      if (a.x < 30 || a.x > W - 30) hitEdge = true;
+    });
+    
+    if (hitEdge) {
+      alienDir *= -1;
+      aliens.forEach(a => a.y += 15);
+      alienSpeed += 0.2;
+    }
+    
+    // Alien bombing
+    if (Date.now() - lastBomb > 800 && aliens.length > 0) {
+      const shooter = aliens[Math.floor(Math.random() * aliens.length)];
+      bombs.push({ x: shooter.x, y: shooter.y + 20, speed: 4 });
+      lastBomb = Date.now();
+    }
+    
+    // Bombs
+    bombs = bombs.filter(b => {
+      b.y += b.speed;
+      if (b.y > H) return false;
+      // Hit player?
+      if (Math.abs(b.x - player.x) < 25 && Math.abs(b.y - player.y) < 20) {
+        lives--;
+        document.getElementById('lives').textContent = lives;
+        if (lives <= 0) {
+          gameOver = true;
+          document.getElementById('gameOver').style.display = 'block';
+        }
+        return false;
+      }
+      return true;
+    });
+    
+    // Bullet-alien collision
+    bullets.forEach((b, bi) => {
+      aliens.forEach((a, ai) => {
+        if (Math.abs(b.x - a.x) < 20 && Math.abs(b.y - a.y) < 15) {
+          bullets.splice(bi, 1);
+          aliens.splice(ai, 1);
+          score += (5 - a.type) * 10;
+          document.getElementById('score').textContent = score;
+        }
+      });
+    });
+    
+    // Win level
+    if (aliens.length === 0) {
+      level++;
+      alienSpeed = 1 + level * 0.3;
+      createAliens();
+    }
+  }
+  
+  requestAnimationFrame(draw);
+}
+
+draw();
+</script>
+</body>
+</html>
