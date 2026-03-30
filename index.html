@@ -2,6 +2,7 @@
 <html>
 <head>
 <title>SPACE INVADERS</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { 
@@ -12,20 +13,29 @@ body {
   height: 100vh; 
   overflow: hidden;
   font-family: 'Courier New', monospace;
+  touch-action: none;
+}
+#gameContainer {
+  position: relative;
+  width: 100%;
+  max-width: 600px;
 }
 #c { 
   border: 4px solid #0f0; 
   box-shadow: 0 0 20px #0f0, inset 0 0 20px #0f0;
+  width: 100%;
+  display: block;
 }
 #overlay {
   position: absolute;
-  top: 20px;
+  top: 10px;
   left: 50%;
   transform: translateX(-50%);
   color: #0f0;
-  font-size: 24px;
+  font-size: 18px;
   text-shadow: 0 0 10px #0f0;
   z-index: 10;
+  text-align: center;
 }
 #gameOver {
   position: absolute;
@@ -33,22 +43,65 @@ body {
   left: 50%;
   transform: translate(-50%, -50%);
   color: #f00;
-  font-size: 48px;
+  font-size: 36px;
   text-shadow: 0 0 20px #f00;
   display: none;
   z-index: 20;
   text-align: center;
 }
 #gameOver span {
-  font-size: 24px;
+  font-size: 18px;
   color: #0f0;
+}
+#controls {
+  position: absolute;
+  bottom: 10px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 20px;
+  z-index: 15;
+}
+.ctrl {
+  width: 70px;
+  height: 70px;
+  border: 3px solid #0f0;
+  border-radius: 50%;
+  background: rgba(0,255,0,0.1);
+  color: #0f0;
+  font-size: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: pointer;
+}
+.ctrl:active {
+  background: rgba(0,255,0,0.4);
+}
+#btnLeft { }
+#btnRight { }
+#btnShoot {
+  width: 90px;
+  height: 70px;
+  font-size: 14px;
+  font-weight: bold;
 }
 </style>
 </head>
 <body>
-<div id="overlay">SCORE: <span id="score">0</span> &nbsp;&nbsp; LIVES: <span id="lives">3</span></div>
-<div id="gameOver">GAME OVER<br><span>PRESS SPACE TO RESTART</span></div>
-<canvas id="c"></canvas>
+<div id="gameContainer">
+  <div id="overlay">SCORE: <span id="score">0</span> &nbsp;&nbsp; LIVES: <span id="lives">3</span></div>
+  <div id="gameOver">GAME OVER<br><span>PRESS ANY BUTTON TO RESTART</span></div>
+  <canvas id="c"></canvas>
+  <div id="controls">
+    <div class="ctrl" id="btnLeft">◀</div>
+    <div class="ctrl" id="btnShoot">FIRE</div>
+    <div class="ctrl" id="btnRight">▶</div>
+  </div>
+</div>
 <script>
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
@@ -58,17 +111,19 @@ canvas.height = 700;
 const W = canvas.width;
 const H = canvas.height;
 
+// Touch/Input state
+let movingLeft = false;
+let movingRight = false;
+
 // Player
-let player = { x: W/2, y: H - 60, w: 50, h: 20, speed: 6 };
+let player = { x: W/2, y: H - 100, w: 50, h: 20, speed: 6 };
 let bullets = [];
 let bombs = [];
 let aliens = [];
 let alienDir = 1;
 let alienSpeed = 1;
-let alienDrop = 0;
 let score = 0;
 let lives = 3;
-let gameRunning = true;
 let gameOver = false;
 let lastBomb = 0;
 let level = 1;
@@ -91,19 +146,31 @@ function createAliens() {
 }
 createAliens();
 
-// Input
-let keys = {};
-document.addEventListener('keydown', e => {
-  keys[e.code] = true;
-  if (e.code === 'Space') {
-    if (gameOver) {
-      reset();
-    } else if (gameRunning) {
-      bullets.push({ x: player.x, y: player.y - 10, speed: 10 });
-    }
+// Touch controls
+const btnLeft = document.getElementById('btnLeft');
+const btnRight = document.getElementById('btnRight');
+const btnShoot = document.getElementById('btnShoot');
+
+btnLeft.addEventListener('touchstart', e => { e.preventDefault(); movingLeft = true; });
+btnLeft.addEventListener('touchend', e => { e.preventDefault(); movingLeft = false; });
+btnLeft.addEventListener('mousedown', e => { movingLeft = true; });
+btnLeft.addEventListener('mouseup', e => { movingLeft = false; });
+
+btnRight.addEventListener('touchstart', e => { e.preventDefault(); movingRight = true; });
+btnRight.addEventListener('touchend', e => { e.preventDefault(); movingRight = false; });
+btnRight.addEventListener('mousedown', e => { movingRight = true; });
+btnRight.addEventListener('mouseup', e => { movingRight = false; });
+
+btnShoot.addEventListener('touchstart', e => { e.preventDefault(); shoot(); });
+btnShoot.addEventListener('click', e => shoot());
+
+function shoot() {
+  if (gameOver) {
+    reset();
+  } else {
+    bullets.push({ x: player.x, y: player.y - 10, speed: 10 });
   }
-});
-document.addEventListener('keyup', e => keys[e.code] = false);
+}
 
 function reset() {
   player.x = W/2;
@@ -114,20 +181,18 @@ function reset() {
   score = 0;
   lives = 3;
   gameOver = false;
-  gameRunning = true;
   level = 1;
   document.getElementById('gameOver').style.display = 'none';
+  document.getElementById('score').textContent = score;
+  document.getElementById('lives').textContent = lives;
   createAliens();
 }
 
 // Draw functions
 function drawPlayer() {
   ctx.fillStyle = '#0f0';
-  // Ship body
   ctx.fillRect(player.x - 25, player.y, 50, 20);
-  // Cannon
   ctx.fillRect(player.x - 3, player.y - 15, 6, 15);
-  // Wings
   ctx.fillStyle = '#0a0';
   ctx.fillRect(player.x - 30, player.y + 5, 8, 15);
   ctx.fillRect(player.x + 22, player.y + 5, 8, 15);
@@ -137,7 +202,6 @@ function drawAlien(a, frame) {
   ctx.fillStyle = a.type === 0 ? '#f00' : a.type < 3 ? '#ff0' : '#0ff';
   const f = frame % 2;
   if (a.type === 0) {
-    // Top row - squid
     ctx.fillRect(a.x - 10, a.y, 5, 8);
     ctx.fillRect(a.x + 5, a.y, 5, 8);
     ctx.fillRect(a.x - 15, a.y + 8, 30, 8);
@@ -147,7 +211,6 @@ function drawAlien(a, frame) {
       ctx.fillRect(a.x + 10, a.y + 8, 5, 8);
     }
   } else {
-    // Crab / octopus
     ctx.fillRect(a.x - 12, a.y + 4, 8, 8);
     ctx.fillRect(a.x + 4, a.y + 4, 8, 8);
     ctx.fillRect(a.x - 8, a.y + 12, 16, 8);
@@ -172,50 +235,36 @@ function drawBomb(b) {
 }
 
 function draw() {
-  // Background with scanlines
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, W, H);
   
-  // Scanlines effect
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
   for (let y = 0; y < H; y += 4) {
     ctx.fillRect(0, y, W, 2);
   }
   
-  // Stars
   ctx.fillStyle = '#333';
   for (let i = 0; i < 50; i++) {
-    ctx.fillRect((i * 73) % W, (i * 47) % (H - 100), 2, 2);
+    ctx.fillRect((i * 73) % W, (i * 47) % (H - 150), 2, 2);
   }
   
   if (!gameOver) {
-    // Draw player
     drawPlayer();
-    
-    // Draw aliens
     aliens.forEach(a => drawAlien(a, Math.floor(Date.now() / 500) % 2));
-    
-    // Draw bullets
     bullets.forEach(drawBullet);
-    
-    // Draw bombs
     bombs.forEach(drawBomb);
   }
   
-  // Update
   if (gameRunning && !gameOver) {
-    // Player movement
-    if (keys['ArrowLeft'] || keys['KeyA']) player.x -= player.speed;
-    if (keys['ArrowRight'] || keys['KeyD']) player.x += player.speed;
+    if (movingLeft) player.x -= player.speed;
+    if (movingRight) player.x += player.speed;
     player.x = Math.max(30, Math.min(W - 30, player.x));
     
-    // Bullets
     bullets = bullets.filter(b => {
       b.y -= b.speed;
       return b.y > 0;
     });
     
-    // Alien movement
     let hitEdge = false;
     aliens.forEach(a => {
       a.x += alienDir * alienSpeed;
@@ -228,18 +277,15 @@ function draw() {
       alienSpeed += 0.2;
     }
     
-    // Alien bombing
     if (Date.now() - lastBomb > 800 && aliens.length > 0) {
       const shooter = aliens[Math.floor(Math.random() * aliens.length)];
       bombs.push({ x: shooter.x, y: shooter.y + 20, speed: 4 });
       lastBomb = Date.now();
     }
     
-    // Bombs
     bombs = bombs.filter(b => {
       b.y += b.speed;
       if (b.y > H) return false;
-      // Hit player?
       if (Math.abs(b.x - player.x) < 25 && Math.abs(b.y - player.y) < 20) {
         lives--;
         document.getElementById('lives').textContent = lives;
@@ -252,7 +298,6 @@ function draw() {
       return true;
     });
     
-    // Bullet-alien collision
     bullets.forEach((b, bi) => {
       aliens.forEach((a, ai) => {
         if (Math.abs(b.x - a.x) < 20 && Math.abs(b.y - a.y) < 15) {
@@ -264,7 +309,6 @@ function draw() {
       });
     });
     
-    // Win level
     if (aliens.length === 0) {
       level++;
       alienSpeed = 1 + level * 0.3;
@@ -274,6 +318,19 @@ function draw() {
   
   requestAnimationFrame(draw);
 }
+
+// Keyboard support
+document.addEventListener('keydown', e => {
+  if (e.code === 'ArrowLeft' || e.code === 'KeyA') movingLeft = true;
+  if (e.code === 'ArrowRight' || e.code === 'KeyD') movingRight = true;
+  if (e.code === 'Space') { e.preventDefault(); shoot(); }
+});
+document.addEventListener('keyup', e => {
+  if (e.code === 'ArrowLeft' || e.code === 'KeyA') movingLeft = false;
+  if (e.code === 'ArrowRight' || e.code === 'KeyD') movingRight = false;
+});
+
+let gameRunning = true;
 
 draw();
 </script>
